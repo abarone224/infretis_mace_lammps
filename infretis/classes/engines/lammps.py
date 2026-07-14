@@ -434,7 +434,8 @@ class LAMMPSEngine(EngineBase):
         exe_path: Path = Path(".").resolve(),
         sleep: float = 0.1,
         triclinic: bool = False,
-        units = "real"
+        units = "real",
+        frozen_ids = None 
     ):
         """Initialize the LAMMPS simulation engine.
 
@@ -474,6 +475,8 @@ class LAMMPSEngine(EngineBase):
         data_info = check_lammps_data(self.input_files["data"])
         self.triclinic = data_info["triclinic"]
         self.temperature = temperature
+        self.frozen_ids = frozen_ids
+
         self.units = units
         if self.units == "real":
             self.kb = 1.987204259e-3  # kcal/(mol*K)
@@ -732,9 +735,13 @@ class LAMMPSEngine(EngineBase):
         vel, _ = self.draw_maxwellian_velocities(vel, mass, self.beta)
         # convert to correct units
         vel /= scale
+        if self.frozen_ids is not None:
+            vel[np.array(self.frozen_ids, dtype=int) - 1] = 0.0 
+
         # reset momentum is not the default in LAMMPS
         if vel_settings.get("zero_momentum", False):
             vel = reset_momentum(vel, mass)
+
 
         conf_out = os.path.join(self.exe_dir, f"genvel.{self.ext}")
         write_lammpstrj(
