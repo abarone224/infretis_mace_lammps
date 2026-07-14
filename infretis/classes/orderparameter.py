@@ -291,15 +291,15 @@ class Distance(OrderParameter):
 
     def calculate(self, system: System) -> List[float]:
     """Calculate the order parameter."""
-    delta = system.pos[self.index[1]] - system.pos[self.index[0]]
-    if self.periodic and system.box is not None:
-        box = np.asarray(system.box).ravel()
-        if box.size > 3:
-            delta = pbc_dist_matrix(delta, box_to_matrix(box))
-        else:
-            delta = pbc_dist_coordinate(delta, box[:3])
-    lamb = np.sqrt(np.dot(delta, delta))
-    return [lamb]
+        delta = system.pos[self.index[1]] - system.pos[self.index[0]]
+        if self.periodic and system.box is not None:
+            box = np.asarray(system.box).ravel()
+            if box.size > 3:
+                delta = pbc_dist_matrix(delta, box_to_matrix(box))
+            else:
+                delta = pbc_dist_coordinate(delta, box[:3])
+        lamb = np.sqrt(np.dot(delta, delta))
+        return [lamb]
 
 
 class Velocity(OrderParameter):
