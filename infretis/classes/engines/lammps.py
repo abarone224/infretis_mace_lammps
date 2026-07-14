@@ -688,15 +688,16 @@ class LAMMPSEngine(EngineBase):
             # units of lammps.
             # using wolfram alpha:
             #   sqrt(1 eV *6.02214076e23 / gram) in angstrom/picosecond to 15 significant figures
+            # 
 
-            scale = 98.2269474855602
+            scale = 1./ 98.2269474855602 # ev*mol/g = 98 Å / ps  --> new vel [A/ps] = old vel [ev*mol/g] * 98
             
         else:
             raise ValueError(f'Units style "{self.units}" not implemented!')
 
         pos = self.dump_frame(system)
         id_type, xyz, vel, box = read_lammpstrj(pos, 0, self.n_atoms)
-        kin_old = kinetic_energy(vel, mass)[0]
+        kin_old = kinetic_energy(vel, mass)[0] # 0.5*m*v^2 
         vel, _ = self.draw_maxwellian_velocities(vel, mass, self.beta)
         # convert to correct units
         vel /= scale
