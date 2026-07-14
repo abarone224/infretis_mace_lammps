@@ -217,12 +217,12 @@ def get_atom_masses(lammps_data: Union[str, Path], atom_style) -> np.ndarray:
     Args:
         lammps_data: Path to the LAMMPS data file to read.
 
-        atom_style: The style used in lammps. Supports 'full' and 'charge'.
+        atom_style: The style used in lammps. Supports 'full', 'charge' and 'atomic'.
 
     Returns:
         An array with the masses read from the file.
     """
-    col = {"full": 2, "charge": 1}
+    col = {"full": 2, "charge": 1, "atomic": 1}
     if atom_style not in col:
         raise NotImplementedError(f"Style {atom_style}' not supported yet.")
     n_atoms = 0
@@ -403,6 +403,7 @@ class LAMMPSEngine(EngineBase):
         exe_path: Path = Path(".").resolve(),
         sleep: float = 0.1,
         triclinic: bool = False,
+        units = "real"
     ):
         """Initialize the LAMMPS simulation engine.
 
@@ -442,8 +443,16 @@ class LAMMPSEngine(EngineBase):
         data_info = check_lammps_data(self.input_files["data"])
         self.triclinic = data_info["triclinic"]
         self.temperature = temperature
-        self.kb = 1.987204259e-3  # kcal/(mol*K)
-        self._beta = 1 / (self.kb * self.temperature)
+        self.units = units
+        if self.units == "real":
+            self.kb = 1.987204259e-3  # kcal/(mol*K)
+            self._beta = 1 / (self.kb * self.temperature)
+        elif self.units == "metal":
+            self.kb= 8.617333262e-5 # eV/K
+            self._beta = 1 / (self.kb * self.temperature) 
+        else:
+            raise ValueError(f'Units style "{self.units}" not implemented!')
+
 
     def _propagate_from(
         self,
@@ -665,13 +674,23 @@ class LAMMPSEngine(EngineBase):
             This method does **not** take care of constraints.
         """
         mass = self.mass
-        # energy is in units kcal/mol which we want to convert
-        # to units (g/mol)*Å^2/fs (units of m*v^2), the velocity
-        # units of lammps.
-        # using Unitful:
-        #   uconvert((u"kcal/g")^0.5, 1u"Å/fs") = 48.88821290839617
-        # so we need to scale the velocities by this factor
-        scale = 48.88821290839617
+        if self.units == "real":
+            # energy is in units kcal/mol which we want to convert
+            # to units (g/mol)*Å^2/fs^2 (units of m*v^2), the velocity
+            # units of lammps.
+            # using Unitful:
+            #   uconvert((u"kcal/g")^0.5, 1u"Å/fs") = 48.88821290839617
+            # so we need to scale the velocities by this factor
+            scale = 48.88821290839617
+        elif self.units == "metal":
+            # energy in units of eV which we want to convert 
+            # to units (g/mol*N_A)*Å^2/ps^2 (mv^2), the velocity 
+            # units of lammps.
+            # using wolfram alpha:
+            #   sqrt(1 eV *6.02214076e23 / gram) in angstrom/picosecond to 15 significant figures
+
+            scale = 98.2269474855602
+            
         pos = self.dump_frame(system)
         id_type, xyz, vel, box = read_lammpstrj(pos, 0, self.n_atoms)
         kin_old = kinetic_energy(vel, mass)[0]
