@@ -290,7 +290,7 @@ class Distance(OrderParameter):
         return [lamb]
 
     def calculate(self, system: System) -> List[float]:
-    """Calculate the order parameter."""
+        """Calculate the order parameter."""
         delta = system.pos[self.index[1]] - system.pos[self.index[0]]
         if self.periodic and system.box is not None:
             box = np.asarray(system.box).ravel()
