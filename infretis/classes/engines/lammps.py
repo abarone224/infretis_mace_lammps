@@ -691,6 +691,9 @@ class LAMMPSEngine(EngineBase):
 
             scale = 98.2269474855602
             
+        else:
+            raise ValueError(f'Units style "{self.units}" not implemented!')
+
         pos = self.dump_frame(system)
         id_type, xyz, vel, box = read_lammpstrj(pos, 0, self.n_atoms)
         kin_old = kinetic_energy(vel, mass)[0]
