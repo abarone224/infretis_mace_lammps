@@ -286,7 +286,38 @@ def get_atom_masses(lammps_data: Union[str, Path], atom_style) -> np.ndarray:
     return masses
 
 
+
 def shift_boxbounds(
+    xyz: np.ndarray, box: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Shift positions so the lower box bounds are 0.
+
+    For triclinic cells, LAMMPS dumps *bounds* (xlo_bound etc.) which
+    already include the tilt factors. We invert that to recover the
+    true edge lengths, and return the tilt factors alongside them.
+
+    Returns:
+        - The shifted positions.
+        - [lx, ly, lz] for orthogonal cells, or
+          [lx, ly, lz, xy, xz, yz] for triclinic cells.
+    """
+    xyz = xyz - box[:, 0]           # not in-place: avoid mutating the caller's array
+
+    if box.shape[1] < 3 or not np.any(box[:, 2]):
+        # orthogonal
+        lengths = (box[:, 1] - box[:, 0]).flatten()
+        return xyz, lengths
+
+    xy, xz, yz = box[0, 2], box[1, 2], box[2, 2]
+    xlo = box[0, 0] - min(0.0, xy, xz, xy + xz)
+    xhi = box[0, 1] - max(0.0, xy, xz, xy + xz)
+    ylo = box[1, 0] - min(0.0, yz)
+    yhi = box[1, 1] - max(0.0, yz)
+    lx, ly, lz = xhi - xlo, yhi - ylo, box[2, 1] - box[2, 0]
+    return xyz, np.array([lx, ly, lz, xy, xz, yz])
+
+
+def shift_boxbounds_old( # <-- inccorect implementation for triclinic boxes
     xyz: np.ndarray, box: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Shift positions so that the lower box bounds are 0.

@@ -44,6 +44,65 @@ def pbc_dist_coordinate(
             pbcdist[i] = distance[i]
     return pbcdist
 
+def box_to_matrix(box: np.ndarray) -> np.ndarray:
+    """Build the cell matrix from a box specification.
+
+    Args:
+        box: Either [lx, ly, lz] (orthogonal) or
+            [lx, ly, lz, xy, xz, yz] (triclinic, LAMMPS convention).
+
+    Returns:
+        The (3, 3) cell matrix whose *columns* are the cell vectors
+        a = (lx, 0, 0), b = (xy, ly, 0), c = (xz, yz, lz).
+    """
+    box = np.asarray(box, dtype=float).ravel()
+    if box.size == 3:
+        return np.diag(box)
+    if box.size == 6:
+        lx, ly, lz, xy, xz, yz = box
+        return np.array(
+            [
+                [lx, xy, xz],
+                [0.0, ly, yz],
+                [0.0, 0.0, lz],
+            ]
+        )
+    raise ValueError(f"Cannot build a cell matrix from a box of size {box.size}")
+
+
+def pbc_dist_matrix(distance: np.ndarray, cell: np.ndarray) -> np.ndarray:
+    """Apply the minimum-image convention for a general (triclinic) cell.
+
+    Args:
+        distance: A distance vector (cartesian).
+        cell: The (3, 3) cell matrix (columns are the cell vectors).
+
+    Returns:
+        The minimum-image distance vector.
+
+    Note:
+        A single round-trip through fractional coordinates is not
+        guaranteed to give the true minimum image for strongly skewed
+        cells, so the 27 nearest images are checked explicitly.
+    """
+    inv_cell = np.linalg.inv(cell)
+    # Wrap into the central cell via fractional coordinates.
+    frac = inv_cell @ distance
+    frac -= np.rint(frac)
+    best = cell @ frac
+    best_sq = float(best @ best)
+    # Check neighbouring images; needed for skewed cells.
+    for i in (-1, 0, 1):
+        for j in (-1, 0, 1):
+            for k in (-1, 0, 1):
+                if i == j == k == 0:
+                    continue
+                trial = best + cell @ np.array([i, j, k], dtype=float)
+                trial_sq = float(trial @ trial)
+                if trial_sq < best_sq:
+                    best_sq = trial_sq
+                    best = trial
+    return best
 
 class OrderParameter:
     """Base class for order parameters.
@@ -221,7 +280,7 @@ class Distance(OrderParameter):
         self.periodic = periodic
         self.index = index
 
-    def calculate(self, system: System) -> List[float]:
+    def calculate_old(self, system: System) -> List[float]: # <-- broke with triclinic boxes 
         """Calculate the order parameter."""
         delta = system.pos[self.index[1]] - system.pos[self.index[0]]
         if self.periodic and system.box is not None:
@@ -229,6 +288,18 @@ class Distance(OrderParameter):
             delta = pbc_dist_coordinate(delta, box)
         lamb = np.sqrt(np.dot(delta, delta))
         return [lamb]
+
+    def calculate(self, system: System) -> List[float]:
+    """Calculate the order parameter."""
+    delta = system.pos[self.index[1]] - system.pos[self.index[0]]
+    if self.periodic and system.box is not None:
+        box = np.asarray(system.box).ravel()
+        if box.size > 3:
+            delta = pbc_dist_matrix(delta, box_to_matrix(box))
+        else:
+            delta = pbc_dist_coordinate(delta, box[:3])
+    lamb = np.sqrt(np.dot(delta, delta))
+    return [lamb]
 
 
 class Velocity(OrderParameter):
